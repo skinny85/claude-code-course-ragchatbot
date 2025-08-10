@@ -245,6 +245,39 @@ header h1 {
     color: var(--text-secondary);
 }
 
+/* Source Links Styling */
+.sources-content a {
+    color: #60a5fa !important;
+    text-decoration: none !important;
+    font-weight: 500;
+    padding: 0.35rem 0.75rem;
+    margin: 0.25rem 0.25rem 0.25rem 0;
+    background: rgba(96, 165, 250, 0.15) !important;
+    border: 1px solid rgba(96, 165, 250, 0.3) !important;
+    border-radius: 8px;
+    display: inline-block;
+    transition: all 0.2s ease;
+    line-height: 1.4;
+    font-size: 0.8rem;
+}
+
+.sources-content a:hover {
+    color: #93c5fd !important;
+    background: rgba(96, 165, 250, 0.25) !important;
+    border-color: rgba(96, 165, 250, 0.5) !important;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(96, 165, 250, 0.4);
+}
+
+.sources-content a:focus {
+    outline: 2px solid #60a5fa !important;
+    outline-offset: 2px;
+}
+
+.sources-content a:active {
+    transform: translateY(0);
+}
+
 /* Markdown formatting styles */
 .message-content h1,
 .message-content h2,
