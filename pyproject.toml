@@ -13,6 +13,8 @@ dependencies = [
     "python-multipart==0.0.20",
     "python-dotenv==1.1.1",
     "numpy<2",
+    "pytest>=8.4.1",
+    "pytest-mock>=3.14.1",
 ]
 [tool.uv]
 required-environments = [
