@@ -1,6 +1,7 @@
-from typing import Dict, Any, Optional, Protocol
 from abc import ABC, abstractmethod
-from vector_store import VectorStore, SearchResults
+from typing import Any, Dict, Optional, Protocol
+
+from vector_store import SearchResults, VectorStore
 
 
 class Tool(ABC):
@@ -34,22 +35,27 @@ class CourseSearchTool(Tool):
                 "properties": {
                     "query": {
                         "type": "string",
-                        "description": "What to search for in the course content"
+                        "description": "What to search for in the course content",
                     },
                     "course_name": {
                         "type": "string",
-                        "description": "Course title (partial matches work, e.g. 'MCP', 'Introduction')"
+                        "description": "Course title (partial matches work, e.g. 'MCP', 'Introduction')",
                     },
                     "lesson_number": {
                         "type": "integer",
-                        "description": "Specific lesson number to search within (e.g. 1, 2, 3)"
-                    }
+                        "description": "Specific lesson number to search within (e.g. 1, 2, 3)",
+                    },
+                },
+                "required": ["query"],
             },
-                "required": ["query"]
-            }
         }
 
-    def execute(self, query: str, course_name: Optional[str] = None, lesson_number: Optional[int] = None) -> str:
+    def execute(
+        self,
+        query: str,
+        course_name: Optional[str] = None,
+        lesson_number: Optional[int] = None,
+    ) -> str:
         """
         Execute the search tool with given parameters.
 
@@ -64,9 +70,7 @@ class CourseSearchTool(Tool):
 
         # Use the vector store's unified search interface
         results = self.store.search(
-            query=query,
-            course_name=course_name,
-            lesson_number=lesson_number
+            query=query, course_name=course_name, lesson_number=lesson_number
         )
 
         # Handle errors
@@ -91,8 +95,8 @@ class CourseSearchTool(Tool):
         sources = []  # Track sources for the UI (now structured with links)
 
         for doc, meta in zip(results.documents, results.metadata):
-            course_title = meta.get('course_title', 'unknown')
-            lesson_num = meta.get('lesson_number')
+            course_title = meta.get("course_title", "unknown")
+            lesson_num = meta.get("lesson_number")
 
             # Build context header
             header = f"[{course_title}"
@@ -107,17 +111,14 @@ class CourseSearchTool(Tool):
 
             # Try to get lesson link if we have lesson number
             lesson_link = None
-            if lesson_num is not None and course_title != 'unknown':
+            if lesson_num is not None and course_title != "unknown":
                 try:
                     lesson_link = self.store.get_lesson_link(course_title, lesson_num)
                 except Exception as e:
                     print(f"Error getting lesson link: {e}")
 
             # Create structured source object
-            source = {
-                "text": source_text,
-                "url": lesson_link
-            }
+            source = {"text": source_text, "url": lesson_link}
             sources.append(source)
 
             formatted.append(f"{header}\n{doc}")
@@ -126,6 +127,7 @@ class CourseSearchTool(Tool):
         self.last_sources = sources
 
         return "\n\n".join(formatted)
+
 
 class CourseOutlineTool(Tool):
     """Tool for getting course outlines with complete lesson information"""
@@ -143,11 +145,11 @@ class CourseOutlineTool(Tool):
                 "properties": {
                     "course_name": {
                         "type": "string",
-                        "description": "Course title (partial matches work, e.g. 'MCP', 'Introduction')"
+                        "description": "Course title (partial matches work, e.g. 'MCP', 'Introduction')",
                     }
                 },
-                "required": ["course_name"]
-            }
+                "required": ["course_name"],
+            },
         }
 
     def execute(self, course_name: str) -> str:
@@ -168,48 +170,54 @@ class CourseOutlineTool(Tool):
         # Get course metadata from catalog
         try:
             results = self.store.course_catalog.get(ids=[course_title])
-            if not results or not results['metadatas'] or not results['metadatas']:
+            if not results or not results["metadatas"] or not results["metadatas"]:
                 return f"Course metadata not found for '{course_title}'"
 
-            metadata = results['metadatas'][0]
-            
+            metadata = results["metadatas"][0]
+
             # Extract course information
-            title = metadata.get('title', 'Unknown')
-            instructor = metadata.get('instructor')
-            course_link = metadata.get('course_link')
-            lessons_json = metadata.get('lessons_json')
-            
+            title = metadata.get("title", "Unknown")
+            instructor = metadata.get("instructor")
+            course_link = metadata.get("course_link")
+            lessons_json = metadata.get("lessons_json")
+
             if not lessons_json:
                 return f"No lesson information available for '{title}'"
-            
+
             # Parse lessons
             import json
+
             lessons = json.loads(lessons_json)
-            
+
             # Format response
             response_parts = [f"**Course:** {title}"]
-            
+
             if course_link:
                 response_parts.append(f"**Course Link:** {course_link}")
-            
+
             if instructor:
                 response_parts.append("")  # Add first blank line before instructor
-                response_parts.append("")  # Add second blank line for proper Markdown separation
+                response_parts.append(
+                    ""
+                )  # Add second blank line for proper Markdown separation
                 response_parts.append(f"**Instructor:** {instructor}")
-            
+
             response_parts.append("**Lessons:**")
-            response_parts.append("")  # Blank line before list for proper Markdown rendering
-            
-            for lesson in sorted(lessons, key=lambda x: x.get('lesson_number', 0)):
-                lesson_num = lesson.get('lesson_number')
-                lesson_title = lesson.get('lesson_title', 'Untitled')
+            response_parts.append(
+                ""
+            )  # Blank line before list for proper Markdown rendering
+
+            for lesson in sorted(lessons, key=lambda x: x.get("lesson_number", 0)):
+                lesson_num = lesson.get("lesson_number")
+                lesson_title = lesson.get("lesson_title", "Untitled")
                 lesson_entry = f"- Lesson {lesson_num}: {lesson_title}"
                 response_parts.append(lesson_entry)
-            
+
             return "\n".join(response_parts)
-            
+
         except Exception as e:
             return f"Error retrieving course outline: {str(e)}"
+
 
 class ToolManager:
     """Manages available tools for the AI"""
@@ -224,7 +232,6 @@ class ToolManager:
         if not tool_name:
             raise ValueError("Tool must have a 'name' in its definition")
         self.tools[tool_name] = tool
-
 
     def get_tool_definitions(self) -> list:
         """Get all tool definitions for Anthropic tool calling"""
@@ -241,12 +248,12 @@ class ToolManager:
         """Get sources from the last search operation"""
         # Check all tools for last_sources attribute
         for tool in self.tools.values():
-            if hasattr(tool, 'last_sources') and tool.last_sources:
+            if hasattr(tool, "last_sources") and tool.last_sources:
                 return tool.last_sources
         return []
 
     def reset_sources(self):
         """Reset sources from all tools that track sources"""
         for tool in self.tools.values():
-            if hasattr(tool, 'last_sources'):
+            if hasattr(tool, "last_sources"):
                 tool.last_sources = []
