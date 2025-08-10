@@ -1,7 +1,7 @@
-# Frontend Changes and Code Quality Implementation
+# Frontend Changes: Testing, Code Quality, and UI Improvements
 
 ## Overview
-This document outlines both the testing framework enhancements and code quality tools that have been implemented for the Course Materials Assistant project. These changes ensure better reliability, maintainability, and code quality for both backend and frontend components.
+This document outlines the comprehensive improvements made to the Course Materials Assistant project, including testing framework enhancements, code quality tools, and new user interface features. These changes ensure better reliability, maintainability, code quality, and user experience.
 
 ## Testing Framework Implementation
 
@@ -115,6 +115,114 @@ This document outlines both the testing framework enhancements and code quality 
 - Import statements in Python files have been sorted and organized
 - JavaScript code follows standard style conventions with custom enhancements
 
+## UI Feature: Dark/Light Theme Toggle
+
+### Files Modified
+
+#### 1. `frontend/index.html`
+- **Added theme toggle button to header**
+  - Positioned in top-right corner of header
+  - Uses sun (☀️) and moon (🌙) emoji icons
+  - Includes proper ARIA label for accessibility
+  - Wrapped header content in `.header-content` div for better layout
+
+#### 2. `frontend/style.css` 
+- **Enhanced CSS Variables System**
+  - Reorganized existing dark theme variables with clear comments
+  - Added comprehensive light theme variables using `[data-theme="light"]` selector
+  - Light theme uses white backgrounds, dark text, and appropriate contrast ratios
+
+- **Added Global Smooth Transitions**
+  - Applied to all elements for seamless theme switching
+  - Covers `background-color`, `color`, `border-color`, and `box-shadow`
+  - 0.3 second ease transition duration
+
+- **Updated Header Styles**
+  - Changed from `display: none` to fully visible header
+  - Added flexbox layout for header content and toggle button positioning
+  - Proper padding and border styling consistent with theme
+
+- **Theme Toggle Button Styles**
+  - Modern toggle design with rounded corners
+  - Smooth hover and focus effects with transform animations
+  - Icon rotation and opacity transitions for visual feedback
+  - Accessible focus states with custom focus rings
+
+#### 3. `frontend/script.js`
+- **Theme Management System**
+  - Added `themeToggle` to global DOM elements
+  - `initializeTheme()`: Loads saved preference from localStorage or defaults to dark
+  - `toggleTheme()`: Switches between themes and saves preference
+  - `applyTheme()`: Applies theme by setting/removing `data-theme` attribute
+  - Integrated theme initialization into app startup sequence
+
+- **Event Listeners**
+  - Added click handler for theme toggle button
+  - Proper theme persistence using localStorage
+
+### Theme Features Implemented
+
+#### ✅ Toggle Button Design
+- Icon-based design with sun/moon emojis
+- Positioned in top-right corner of header
+- Smooth transition animations when toggling
+- Accessible with keyboard navigation and ARIA labels
+
+#### ✅ Light Theme Colors
+- White background (`#ffffff`)
+- Light surface colors (`#f8fafc`)
+- Dark text for excellent contrast (`#1e293b`)
+- Maintained primary blue colors for consistency
+- Proper border and shadow adjustments for light theme
+
+#### ✅ JavaScript Functionality
+- Theme state persistence via localStorage
+- Smooth theme transitions
+- Automatic theme detection on page load
+- Toggle functionality with visual feedback
+
+#### ✅ Implementation Details
+- Uses CSS custom properties for efficient theme switching
+- `data-theme` attribute on document root for theme application
+- All existing UI elements work seamlessly in both themes
+- Maintains visual hierarchy and design consistency
+
+### Technical Implementation
+
+#### Theme Switching Mechanism
+```css
+/* Default (Dark Theme) */
+:root {
+  --background: #0f172a;
+  --text-primary: #f1f5f9;
+  /* ... other dark theme variables */
+}
+
+/* Light Theme Override */
+[data-theme="light"] {
+  --background: #ffffff;
+  --text-primary: #1e293b;
+  /* ... other light theme variables */
+}
+```
+
+#### JavaScript Theme Control
+```javascript
+function toggleTheme() {
+    const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    applyTheme(newTheme);
+    localStorage.setItem('theme', newTheme);
+}
+```
+
+### User Experience Improvements
+- **Instant Theme Switching**: No page reload required
+- **Persistent Preferences**: Theme choice saved across browser sessions  
+- **Smooth Animations**: 300ms transitions for all theme-related properties
+- **Visual Feedback**: Icon rotation and opacity changes during toggle
+- **Accessibility**: Proper focus states and ARIA labeling
+
 ## Dependencies Added
 
 ### Python Dependencies (pyproject.toml)
@@ -171,7 +279,7 @@ The configuration files are compatible with most modern IDEs:
 - WebStorm/PyCharm: Built-in support for these tools
 - Vim/Neovim: Use appropriate plugins for each tool
 
-## Impact on Frontend Development
+## Impact on Development
 
 ### Testing Benefits
 - **API Contract Validation**: Ensures the API endpoints the frontend depends on maintain consistent behavior
@@ -196,6 +304,18 @@ The configuration files are compatible with most modern IDEs:
 4. **Development Confidence**: Changes can be validated without breaking functionality
 5. **Maintainability**: Clean, well-formatted code is easier to maintain
 6. **Collaboration**: Consistent code style improves team collaboration
+7. **User Experience**: Enhanced UI with theme switching for better accessibility
+
+## Browser Compatibility
+- Supports all modern browsers with CSS custom properties
+- Graceful fallback to dark theme if localStorage is unavailable
+- Touch-friendly button size for mobile devices
+
+## Testing and Verification
+The application starts successfully at http://localhost:8000 with:
+- All API endpoints fully tested and working
+- Code quality tools properly configured
+- Theme toggle fully functional in the header area
 
 ## Notes
 - The scripts are designed to work from the project root directory
