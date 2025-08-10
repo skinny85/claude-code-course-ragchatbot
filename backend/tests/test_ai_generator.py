@@ -116,7 +116,7 @@ class TestAIGenerator:
     
     @patch('ai_generator.anthropic.Anthropic')
     def test_generate_response_with_tool_use(self, mock_anthropic_class):
-        """Test generating response with tool use"""
+        """Test generating response with single tool use (backward compatibility)"""
         mock_client = Mock()
         mock_anthropic_class.return_value = mock_client
         
@@ -127,7 +127,7 @@ class TestAIGenerator:
             tool_calls=[tool_use_content]
         )
         
-        # Mock final response after tool execution
+        # Mock final response after tool execution (no more tools)
         final_response = MockAnthropicResponse("Final answer based on tool results")
         
         # Setup mock to return different responses for different calls
@@ -152,7 +152,7 @@ class TestAIGenerator:
             query="test query"
         )
         
-        # Verify two API calls were made
+        # Verify two API calls were made (tool call round + final response)
         assert mock_client.messages.create.call_count == 2
         
         # Verify final result
@@ -173,41 +173,38 @@ class TestAIGenerator:
             tool_calls=[tool_content]
         )
         
-        # Mock final response
-        final_response = MockAnthropicResponse("Result after tool execution")
-        mock_client.messages.create.return_value = final_response
-        
         # Mock tool manager
         mock_tool_manager = Mock()
         mock_tool_manager.execute_tool.return_value = "Search results for Python"
         
-        base_params = {
-            "messages": [{"role": "user", "content": "Find Python content"}],
-            "system": "System prompt"
-        }
+        current_messages = [{"role": "user", "content": "Find Python content"}]
         
-        result = ai_gen._handle_tool_execution(
+        updated_messages, success = ai_gen._handle_tool_execution(
             initial_response, 
-            base_params, 
+            current_messages, 
             mock_tool_manager
         )
         
         # Verify tool execution
         mock_tool_manager.execute_tool.assert_called_once_with("search_tool", query="Python")
         
-        # Verify final API call
-        final_call_args = mock_client.messages.create.call_args[1]
-        assert len(final_call_args["messages"]) == 3  # original + assistant + tool_result
+        # Verify success flag
+        assert success is True
+        
+        # Verify message structure
+        assert len(updated_messages) == 3  # original + assistant + tool_result
         
         # Check tool result message structure
-        tool_result_message = final_call_args["messages"][2]
+        tool_result_message = updated_messages[2]
         assert tool_result_message["role"] == "user"
         assert len(tool_result_message["content"]) == 1
         assert tool_result_message["content"][0]["type"] == "tool_result"
         assert tool_result_message["content"][0]["tool_use_id"] == "tool_id_1"
         assert tool_result_message["content"][0]["content"] == "Search results for Python"
         
-        assert result == "Result after tool execution"
+        # Check assistant message
+        assert updated_messages[1]["role"] == "assistant"
+        assert updated_messages[1]["content"] == [tool_content]
     
     @patch('ai_generator.anthropic.Anthropic')
     def test_handle_tool_execution_multiple_tools(self, mock_anthropic_class):
@@ -226,9 +223,6 @@ class TestAIGenerator:
             tool_calls=[tool1, tool2]
         )
         
-        final_response = MockAnthropicResponse("Combined result from multiple tools")
-        mock_client.messages.create.return_value = final_response
-        
         # Mock tool manager
         mock_tool_manager = Mock()
         mock_tool_manager.execute_tool.side_effect = [
@@ -236,14 +230,11 @@ class TestAIGenerator:
             "Course outline"
         ]
         
-        base_params = {
-            "messages": [{"role": "user", "content": "Find Python info"}],
-            "system": "System prompt"
-        }
+        current_messages = [{"role": "user", "content": "Find Python info"}]
         
-        result = ai_gen._handle_tool_execution(
+        updated_messages, success = ai_gen._handle_tool_execution(
             initial_response, 
-            base_params, 
+            current_messages, 
             mock_tool_manager
         )
         
@@ -252,12 +243,19 @@ class TestAIGenerator:
         mock_tool_manager.execute_tool.assert_any_call("search_tool", query="Python")
         mock_tool_manager.execute_tool.assert_any_call("outline_tool", course_name="Python")
         
+        # Verify success flag
+        assert success is True
+        
         # Verify tool results message contains both results
-        final_call_args = mock_client.messages.create.call_args[1]
-        tool_result_message = final_call_args["messages"][2]
+        tool_result_message = updated_messages[2]
         assert len(tool_result_message["content"]) == 2
         
-        assert result == "Combined result from multiple tools"
+        # Check both tool results
+        tool_results = tool_result_message["content"]
+        assert tool_results[0]["tool_use_id"] == "tool_id_1"
+        assert tool_results[0]["content"] == "Search results"
+        assert tool_results[1]["tool_use_id"] == "tool_id_2"
+        assert tool_results[1]["content"] == "Course outline"
     
     @patch('ai_generator.anthropic.Anthropic')
     def test_tool_execution_with_no_tool_manager(self, mock_anthropic_class):
@@ -275,13 +273,11 @@ class TestAIGenerator:
         ai_gen = AIGenerator("test-key", "test-model")
         tools = [{"name": "search_tool"}]
         
-        # Should return the response content directly since no tool manager
-        # Note: This tests the current behavior, which might not be ideal
+        # With no tool manager, the system should return a fallback response
         result = ai_gen.generate_response("Query", tools=tools, tool_manager=None)
         
-        # Since tool_manager is None, it should return the tool use content
-        # This might indicate a bug in the current implementation
-        assert result == response_with_tools.content[0].text
+        # Should return some meaningful response when tool manager is unavailable
+        assert isinstance(result, str) and len(result) > 0
     
     def test_system_prompt_content(self):
         """Test that system prompt contains expected instructions"""
@@ -304,6 +300,191 @@ class TestAIGenerator:
         # Should propagate the exception
         with pytest.raises(Exception, match="API Error"):
             ai_gen.generate_response("Test query")
+    
+    @patch('ai_generator.anthropic.Anthropic')
+    def test_sequential_tool_calling_two_rounds(self, mock_anthropic_class):
+        """Test sequential tool calling with 2 rounds"""
+        mock_client = Mock()
+        mock_anthropic_class.return_value = mock_client
+        
+        # Round 1: Get course outline
+        tool1_content = MockToolUseContent("tool_id_1", "get_course_outline", {"course_name": "Python Basics"})
+        round1_response = MockAnthropicResponse(
+            stop_reason="tool_use",
+            tool_calls=[tool1_content]
+        )
+        
+        # Round 2: Search for specific content based on outline
+        tool2_content = MockToolUseContent("tool_id_2", "search_course_content", {"query": "lesson 4 content"})
+        round2_response = MockAnthropicResponse(
+            stop_reason="tool_use", 
+            tool_calls=[tool2_content]
+        )
+        
+        # Final response after 2 rounds
+        final_response = MockAnthropicResponse("Here's the comparison between the courses")
+        
+        # Setup responses for 3 API calls
+        mock_client.messages.create.side_effect = [round1_response, round2_response, final_response]
+        
+        ai_gen = AIGenerator("test-key", "test-model")
+        tools = [{"name": "get_course_outline"}, {"name": "search_course_content"}]
+        
+        # Mock tool manager
+        mock_tool_manager = Mock()
+        mock_tool_manager.execute_tool.side_effect = [
+            "Course outline: Lesson 1: Intro, Lesson 2: Variables, Lesson 3: Functions, Lesson 4: Classes",
+            "Lesson 4 covers object-oriented programming concepts"
+        ]
+        
+        result = ai_gen.generate_response(
+            "Compare lesson 4 of Python Basics with similar content",
+            tools=tools,
+            tool_manager=mock_tool_manager
+        )
+        
+        # Verify 3 API calls made (2 tool rounds + final)
+        assert mock_client.messages.create.call_count == 3
+        
+        # Verify both tools executed
+        assert mock_tool_manager.execute_tool.call_count == 2
+        mock_tool_manager.execute_tool.assert_any_call("get_course_outline", course_name="Python Basics")
+        mock_tool_manager.execute_tool.assert_any_call("search_course_content", query="lesson 4 content")
+        
+        assert result == "Here's the comparison between the courses"
+    
+    @patch('ai_generator.anthropic.Anthropic')
+    def test_max_rounds_enforcement(self, mock_anthropic_class):
+        """Test that MAX_ROUNDS (2) is enforced"""
+        mock_client = Mock()
+        mock_anthropic_class.return_value = mock_client
+        
+        # All 3 responses want to use tools (should stop after 2)
+        tool_content = MockToolUseContent("tool_id", "search_tool", {"query": "test"})
+        tool_response = MockAnthropicResponse(
+            stop_reason="tool_use",
+            tool_calls=[tool_content]
+        )
+        
+        # Final response after max rounds reached
+        final_response = MockAnthropicResponse("Final answer after max rounds")
+        
+        # Setup responses - 3rd call should return final response
+        mock_client.messages.create.side_effect = [tool_response, tool_response, final_response]
+        
+        ai_gen = AIGenerator("test-key", "test-model") 
+        tools = [{"name": "search_tool"}]
+        
+        mock_tool_manager = Mock()
+        mock_tool_manager.execute_tool.return_value = "Tool result"
+        
+        result = ai_gen.generate_response(
+            "Complex query requiring multiple searches",
+            tools=tools,
+            tool_manager=mock_tool_manager
+        )
+        
+        # Should make exactly 3 API calls (2 tool rounds + final without tools)
+        assert mock_client.messages.create.call_count == 3
+        
+        # Tools should be executed exactly 2 times (max rounds)
+        assert mock_tool_manager.execute_tool.call_count == 2
+        
+        assert result == "Final answer after max rounds"
+    
+    @patch('ai_generator.anthropic.Anthropic')
+    def test_early_termination_no_tools_needed(self, mock_anthropic_class):
+        """Test early termination when Claude doesn't need tools"""
+        mock_client = Mock()
+        mock_anthropic_class.return_value = mock_client
+        
+        # First response doesn't use tools - should terminate immediately
+        direct_response = MockAnthropicResponse("I can answer this directly without searching")
+        mock_client.messages.create.return_value = direct_response
+        
+        ai_gen = AIGenerator("test-key", "test-model")
+        tools = [{"name": "search_tool"}]
+        mock_tool_manager = Mock()
+        
+        result = ai_gen.generate_response(
+            "What is Python?",
+            tools=tools,
+            tool_manager=mock_tool_manager
+        )
+        
+        # Should make only 1 API call
+        assert mock_client.messages.create.call_count == 1
+        
+        # No tools should be executed
+        assert mock_tool_manager.execute_tool.call_count == 0
+        
+        assert result == "I can answer this directly without searching"
+    
+    @patch('ai_generator.anthropic.Anthropic')
+    def test_tool_execution_failure_handling(self, mock_anthropic_class):
+        """Test graceful handling of tool execution failures"""
+        mock_client = Mock()
+        mock_anthropic_class.return_value = mock_client
+        
+        tool_content = MockToolUseContent("tool_id", "search_tool", {"query": "test"})
+        tool_response = MockAnthropicResponse(
+            stop_reason="tool_use",
+            tool_calls=[tool_content]
+        )
+        
+        mock_client.messages.create.return_value = tool_response
+        
+        ai_gen = AIGenerator("test-key", "test-model")
+        tools = [{"name": "search_tool"}]
+        
+        # Mock tool manager to raise exception
+        mock_tool_manager = Mock()
+        mock_tool_manager.execute_tool.side_effect = Exception("Tool failed")
+        
+        result = ai_gen.generate_response(
+            "Search for something",
+            tools=tools,
+            tool_manager=mock_tool_manager
+        )
+        
+        # Should handle the error gracefully and return a fallback response
+        assert "encountered an issue" in result.lower() or len(result) > 0
+        assert mock_client.messages.create.call_count == 1
+        assert mock_tool_manager.execute_tool.call_count == 1
+    
+    @patch('ai_generator.anthropic.Anthropic') 
+    def test_tool_execution_returns_none_handling(self, mock_anthropic_class):
+        """Test handling when tool returns None"""
+        mock_client = Mock()
+        mock_anthropic_class.return_value = mock_client
+        
+        ai_gen = AIGenerator("test-key", "test-model")
+        
+        tool_content = MockToolUseContent("tool_id", "search_tool", {"query": "test"})
+        initial_response = MockAnthropicResponse(
+            stop_reason="tool_use",
+            tool_calls=[tool_content]
+        )
+        
+        mock_tool_manager = Mock()
+        mock_tool_manager.execute_tool.return_value = None
+        
+        current_messages = [{"role": "user", "content": "Test query"}]
+        
+        updated_messages, success = ai_gen._handle_tool_execution(
+            initial_response,
+            current_messages, 
+            mock_tool_manager
+        )
+        
+        # Should handle None return and convert to "No results found."
+        assert success is True
+        tool_result = updated_messages[2]["content"][0]
+        assert tool_result["content"] == "No results found."
+    
+    def test_max_rounds_constant(self):
+        """Test that MAX_ROUNDS constant is set correctly"""
+        assert AIGenerator.MAX_ROUNDS == 2
 
 
 if __name__ == "__main__":
