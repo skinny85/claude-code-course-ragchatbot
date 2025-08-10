@@ -1,0 +1,23 @@
+{
+  "name": "course-materials-frontend",
+  "version": "1.0.0",
+  "description": "Frontend for Course Materials Assistant",
+  "scripts": {
+    "lint": "eslint . --ext .js",
+    "lint:fix": "eslint . --ext .js --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "quality:check": "npm run lint && npm run format:check",
+    "quality:fix": "npm run lint:fix && npm run format"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0",
+    "eslint-config-standard": "^17.1.0",
+    "eslint-plugin-import": "^2.29.1",
+    "eslint-plugin-n": "^16.6.2",
+    "eslint-plugin-promise": "^6.1.1",
+    "prettier": "^3.2.5",
+    "@html-eslint/eslint-plugin": "^0.24.1",
+    "@html-eslint/parser": "^0.24.1"
+  }
+}
